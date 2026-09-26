@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+case "${2:-}" in
+  https://github.com/StewardFinancial/steward|https://github.com/StewardFinancial/steward.git) ;;
+  *) echo 'Push blocked: unexpected publication repository.' >&2; exit 1 ;;
+esac
+expected=$(git config --local --get steward.publisherLogin || true)
+[ -n "$expected" ] || { echo 'Push blocked: configure the dedicated team publisher locally.' >&2; exit 1; }
+login=$(gh api user --jq .login)
+[ "$login" = "$expected" ] || { echo 'Push blocked: wrong authenticated publisher.' >&2; exit 1; }
+[ "$(git config --get user.name)" = 'Steward Team' ] && [ "$(git config --get user.email)" = 'team@steward.invalid' ] || { echo 'Push blocked: unexpected author configuration.' >&2; exit 1; }
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+  if git log --format='%an|%ae|%cn|%ce' "$local_sha" | grep -v -x 'Steward Team|team@steward.invalid|Steward Team|team@steward.invalid' >/dev/null; then
+    echo 'Push blocked: history contains non-team attribution.' >&2; exit 1
+  fi
+done
+echo 'Steward team publication guard passed.' >&2
